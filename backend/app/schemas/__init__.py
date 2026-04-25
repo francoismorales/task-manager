@@ -4,7 +4,7 @@ from app.schemas.auth import LoginRequest, TokenPayload, TokenResponse
 from app.schemas.project import (
     ProjectCreate,
     ProjectDetailResponse,
-    ProjectMemberCreate,
+    ProjectMemberInvite,
     ProjectMemberResponse,
     ProjectResponse,
     ProjectUpdate,
@@ -23,7 +23,7 @@ __all__ = [
     "TokenResponse",
     "ProjectCreate",
     "ProjectDetailResponse",
-    "ProjectMemberCreate",
+    "ProjectMemberInvite",
     "ProjectMemberResponse",
     "ProjectResponse",
     "ProjectUpdate",

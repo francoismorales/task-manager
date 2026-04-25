@@ -1,8 +1,8 @@
-"""Projects router: CRUD endpoints, all behind authentication.
+"""Projects router: CRUD endpoints + team membership management.
 
 Authorization is enforced inside the service: members can read, only owners
-can update or delete. Domain exceptions are mapped to HTTP responses by the
-global handlers, keeping this layer declarative.
+can update/delete the project and manage members. Domain exceptions are
+mapped to HTTP responses by the global handlers, keeping this layer thin.
 """
 
 from fastapi import APIRouter, status
@@ -11,6 +11,8 @@ from app.dependencies import CurrentUser, ProjectServiceDep
 from app.schemas.project import (
     ProjectCreate,
     ProjectDetailResponse,
+    ProjectMemberInvite,
+    ProjectMemberResponse,
     ProjectResponse,
     ProjectUpdate,
 )
@@ -18,6 +20,7 @@ from app.schemas.project import (
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 
+# --- Project CRUD ----------------------------------------------------------
 @router.get(
     "",
     response_model=list[ProjectResponse],
@@ -99,3 +102,47 @@ def delete_project(
     project_service: ProjectServiceDep,
 ) -> None:
     project_service.delete_for_user(project_id, current_user.id)
+
+
+# --- Team membership -------------------------------------------------------
+@router.post(
+    "/{project_id}/members",
+    response_model=ProjectMemberResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Invite a user to the project by email (owner only)",
+    responses={
+        403: {"description": "Only the owner can invite members"},
+        404: {"description": "Project not found, or no user with that email"},
+        409: {"description": "User is already a member"},
+        422: {"description": "Validation error"},
+    },
+)
+def invite_member(
+    project_id: int,
+    payload: ProjectMemberInvite,
+    current_user: CurrentUser,
+    project_service: ProjectServiceDep,
+) -> ProjectMemberResponse:
+    membership = project_service.invite_member_by_email(
+        project_id, current_user.id, payload.email
+    )
+    return ProjectMemberResponse.model_validate(membership)
+
+
+@router.delete(
+    "/{project_id}/members/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Remove a member from the project (owner only)",
+    responses={
+        400: {"description": "The owner cannot be removed"},
+        403: {"description": "Only the owner can remove members"},
+        404: {"description": "Project not found, or user is not a member"},
+    },
+)
+def remove_member(
+    project_id: int,
+    user_id: int,
+    current_user: CurrentUser,
+    project_service: ProjectServiceDep,
+) -> None:
+    project_service.remove_member(project_id, current_user.id, user_id)

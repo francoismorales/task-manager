@@ -4,11 +4,12 @@ Encapsulates all SQLAlchemy queries so services stay storage-agnostic.
 Eager-loads owner and members to avoid N+1 queries on the detail endpoint.
 """
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.enums import ProjectRole
 from app.models.project import Project, ProjectMember
+from app.models.task import Task
 
 
 class ProjectRepository:
@@ -17,17 +18,12 @@ class ProjectRepository:
     def __init__(self, db: Session) -> None:
         self._db = db
 
-    # --- Reads -------------------------------------------------------------
+    # --- Project reads ----------------------------------------------------
     def get_by_id(self, project_id: int) -> Project | None:
-        """Fetch a project by id (no eager loading)."""
         return self._db.get(Project, project_id)
 
     def get_detail(self, project_id: int) -> Project | None:
-        """Fetch a project with its owner and members eager-loaded.
-
-        Used for the detail endpoint to keep response building free of
-        lazy-load surprises.
-        """
+        """Fetch a project with its owner and members eager-loaded."""
         stmt = (
             select(Project)
             .where(Project.id == project_id)
@@ -39,10 +35,6 @@ class ProjectRepository:
         return self._db.execute(stmt).scalar_one_or_none()
 
     def list_for_user(self, user_id: int) -> list[Project]:
-        """List projects where the user is a member (owner or otherwise).
-
-        Ordered by most recently updated for a sensible default UX.
-        """
         stmt = (
             select(Project)
             .join(ProjectMember, ProjectMember.project_id == Project.id)
@@ -51,30 +43,40 @@ class ProjectRepository:
         )
         return list(self._db.execute(stmt).scalars().all())
 
+    # --- Membership reads -------------------------------------------------
     def get_member(
         self, project_id: int, user_id: int
     ) -> ProjectMember | None:
-        """Return the membership record linking ``user_id`` to ``project_id``."""
         stmt = select(ProjectMember).where(
             ProjectMember.project_id == project_id,
             ProjectMember.user_id == user_id,
         )
         return self._db.execute(stmt).scalar_one_or_none()
 
-    # --- Writes ------------------------------------------------------------
+    def get_member_with_user(
+        self, project_id: int, user_id: int
+    ) -> ProjectMember | None:
+        """Same as ``get_member`` but eager-loads the user (for responses)."""
+        stmt = (
+            select(ProjectMember)
+            .where(
+                ProjectMember.project_id == project_id,
+                ProjectMember.user_id == user_id,
+            )
+            .options(selectinload(ProjectMember.user))
+        )
+        return self._db.execute(stmt).scalar_one_or_none()
+
+    # --- Project writes ---------------------------------------------------
     def create_with_owner(
         self,
         *,
         name: str,
         description: str | None,
-        deadline,  # noqa: ANN001 — date | None, kept loose to avoid imports here
+        deadline,  # noqa: ANN001 — date | None
         owner_id: int,
     ) -> Project:
-        """Create a project and add the owner as a member with role OWNER.
-
-        Both inserts run in the same transaction: if member creation fails,
-        the project insert is rolled back.
-        """
+        """Create a project and add the owner as a member with role OWNER."""
         project = Project(
             name=name,
             description=description,
@@ -82,7 +84,7 @@ class ProjectRepository:
             owner_id=owner_id,
         )
         self._db.add(project)
-        self._db.flush()  # populates project.id without committing
+        self._db.flush()
 
         membership = ProjectMember(
             project_id=project.id,
@@ -96,7 +98,6 @@ class ProjectRepository:
         return project
 
     def update(self, project: Project, **fields) -> Project:
-        """Apply non-None fields to the project and persist."""
         for key, value in fields.items():
             if value is not None:
                 setattr(project, key, value)
@@ -105,6 +106,52 @@ class ProjectRepository:
         return project
 
     def delete(self, project: Project) -> None:
-        """Delete a project. Cascades to members and tasks via FKs."""
         self._db.delete(project)
+        self._db.commit()
+
+    # --- Membership writes ------------------------------------------------
+    def add_member(
+        self,
+        *,
+        project_id: int,
+        user_id: int,
+        role: ProjectRole = ProjectRole.MEMBER,
+    ) -> ProjectMember:
+        """Insert a new membership and return it with ``user`` eager-loaded."""
+        membership = ProjectMember(
+            project_id=project_id,
+            user_id=user_id,
+            role=role,
+        )
+        self._db.add(membership)
+        self._db.commit()
+
+        loaded = self.get_member_with_user(project_id, user_id)
+        assert loaded is not None  # always exists immediately after commit
+        return loaded
+
+    def remove_member(self, membership: ProjectMember) -> None:
+        """Remove a member and clear their task assignments in the project.
+
+        Both operations run in the same transaction so we never end up with
+        a non-member still assigned to a task. The DB-level ``ON DELETE
+        SET NULL`` only fires when a user is fully deleted, not when their
+        membership ends — so we do the bulk update explicitly.
+        """
+        project_id = membership.project_id
+        user_id = membership.user_id
+
+        # Unassign the user from all tasks in this project
+        unassign_stmt = (
+            update(Task)
+            .where(
+                Task.project_id == project_id,
+                Task.assignee_id == user_id,
+            )
+            .values(assignee_id=None)
+        )
+        self._db.execute(unassign_stmt)
+
+        # Then remove the membership
+        self._db.delete(membership)
         self._db.commit()

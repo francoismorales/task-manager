@@ -3,6 +3,7 @@ import type {
   Project,
   ProjectCreatePayload,
   ProjectDetail,
+  ProjectMember,
   ProjectUpdatePayload,
 } from '@/types/project';
 
@@ -33,5 +34,18 @@ export const projectService = {
 
   async remove(id: number): Promise<void> {
     await apiClient.delete(`/projects/${id}`);
+  },
+
+  // --- Team membership ----------------------------------------------------
+  async inviteMember(projectId: number, email: string): Promise<ProjectMember> {
+    const { data } = await apiClient.post<ProjectMember>(
+      `/projects/${projectId}/members`,
+      { email },
+    );
+    return data;
+  },
+
+  async removeMember(projectId: number, userId: number): Promise<void> {
+    await apiClient.delete(`/projects/${projectId}/members/${userId}`);
   },
 };

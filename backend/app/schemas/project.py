@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models.enums import ProjectRole
 from app.schemas.user import UserResponse
@@ -53,8 +53,11 @@ class ProjectDetailResponse(ProjectResponse):
     members: list[ProjectMemberResponse]
 
 
-class ProjectMemberCreate(BaseModel):
-    """Agregar un miembro existente al proyecto."""
+class ProjectMemberInvite(BaseModel):
+    """Invitar a un miembro al proyecto por email.
 
-    user_id: int
-    role: ProjectRole = ProjectRole.MEMBER
+    Buscar por email es más natural que pedir un user_id: el invitador
+    no necesita conocer IDs internos.
+    """
+
+    email: EmailStr

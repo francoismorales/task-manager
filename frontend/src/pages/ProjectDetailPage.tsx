@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
+import MembersSection from '@/components/MembersSection';
 import TaskList from '@/components/TaskList';
 import { useAuth } from '@/hooks/useAuth';
 import { extractApiError } from '@/lib/apiError';
@@ -19,28 +20,26 @@ export default function ProjectDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const loadProject = useCallback(async () => {
+    setError(null);
+    try {
+      const data = await projectService.get(projectId);
+      setProject(data);
+    } catch (err) {
+      setError(extractApiError(err, 'No se pudo cargar el proyecto'));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [projectId]);
+
   useEffect(() => {
     if (Number.isNaN(projectId)) {
       setError('ID de proyecto inválido');
       setIsLoading(false);
       return;
     }
-    let active = true;
-    projectService
-      .get(projectId)
-      .then((data) => {
-        if (active) setProject(data);
-      })
-      .catch((err) => {
-        if (active) setError(extractApiError(err, 'No se pudo cargar el proyecto'));
-      })
-      .finally(() => {
-        if (active) setIsLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [projectId]);
+    loadProject();
+  }, [projectId, loadProject]);
 
   const isOwner = project !== null && user !== null && project.owner_id === user.id;
 
@@ -135,36 +134,13 @@ export default function ProjectDetailPage() {
 
       <TaskList projectId={project.id} members={project.members} />
 
-      <section className="bg-white border border-slate-200 rounded-lg p-5">
-        <h2 className="font-semibold text-slate-800 mb-3">
-          Miembros ({project.members.length})
-        </h2>
-        <ul className="divide-y divide-slate-100">
-          {project.members.map((member) => (
-            <li
-              key={member.id}
-              className="py-2 flex items-center justify-between gap-3"
-            >
-              <div>
-                <p className="text-sm font-medium text-slate-900">
-                  {member.user.full_name}
-                </p>
-                <p className="text-xs text-slate-500">{member.user.email}</p>
-              </div>
-              <span
-                className={
-                  'inline-block rounded-full px-2 py-0.5 text-xs font-medium ' +
-                  (member.role === 'owner'
-                    ? 'bg-brand-100 text-brand-700'
-                    : 'bg-slate-100 text-slate-600')
-                }
-              >
-                {member.role === 'owner' ? 'Propietario' : 'Miembro'}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <MembersSection
+        projectId={project.id}
+        ownerId={project.owner_id}
+        members={project.members}
+        isOwner={isOwner}
+        onChange={loadProject}
+      />
     </div>
   );
 }
