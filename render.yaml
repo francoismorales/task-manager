@@ -1,0 +1,40 @@
+# Render Blueprint: spins up a Postgres database and a web service for the API.
+#
+# To use:
+#   1. Push this repo to GitHub
+#   2. In Render: New + → Blueprint → connect this repo
+#   3. Set the env vars marked "sync: false" (CORS_ORIGINS) in the dashboard
+#
+# Free tier: web services sleep after 15 min of inactivity; first request wakes them.
+
+databases:
+  - name: taskmanager-db
+    databaseName: taskmanager
+    plan: free
+
+services:
+  - type: web
+    name: taskmanager-api
+    runtime: python
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: ./start.sh
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: taskmanager-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true   # Render generates a strong random value on first deploy
+      - key: DEBUG
+        value: "false"
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "1440"
+      - key: CORS_ORIGINS
+        sync: false   # Set in the dashboard to your Vercel URL, e.g.
+                      # https://taskmanager.vercel.app
+      - key: PYTHON_VERSION
+        value: "3.11.10"
