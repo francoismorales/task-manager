@@ -100,5 +100,5 @@ backend/app/
 
 ### Modelo de datos
 
-4 tablas relacionadas: `users`, `projects`, `project_members` (puente), `tasks`. Índices en columnas de búsqueda. FKs con cascadas adecuadas (`CASCADE` para hijos del proyecto, `SET NULL` para `assignee_id` cuando se borra un usuario).
+4 tablas relacionadas: `users`, `projects`, `project_members`, `tasks`. Índices en columnas de búsqueda.
 
