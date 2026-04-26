@@ -1,6 +1,15 @@
 # Task Manager — Gestor de tareas por equipo
 
 ---
+## 🔗 Demo desplegada
+
+- **App (frontend)**: https://task-manager-ruddy-sigma.vercel.app
+- **API (backend)**: https://taskmanager-api-310h.onrender.com
+- **Docs interactivas (Swagger)**: https://taskmanager-api-310h.onrender.com/docs
+
+### ⚠️ Nota importante: despertar el backend antes de usar la app
+
+El backend está alojado en **Render free tier**, que duerme el servicio tras 15 minutos sin tráfico para ahorrar recursos. La primera petición tarda **30–50 segundos** en despertarlo (las siguientes son instantáneas).
 
 ## 🚀 Cómo correr el proyecto en local
 
